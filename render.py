@@ -254,15 +254,39 @@ def next_hours(data, n=HOURS):
 
 
 def rain_summary(rows):
-    likely = [r for r in rows if r["rain"] >= 50]
+    """One headline + one detail line about rain in the next 24 hours."""
+    def when(t):
+        return f"{t:%H:%M}" if t.date() == rows[0]["t"].date() else f"{t:%H:%M} {t:%a}"
+
+    # contiguous runs of hours where rain is likely (>= 50%)
+    runs, cur = [], []
+    for r in rows:
+        if r["rain"] >= 50:
+            cur.append(r)
+        elif cur:
+            runs.append(cur); cur = []
+    if cur:
+        runs.append(cur)
+
+    if runs:
+        first = runs[0]
+        peak = max(first, key=lambda r: r["rain"])
+        end = first[-1]["t"] + timedelta(hours=1)
+        if first[0] is rows[0]:
+            head = "Rain now" if first[-1] is rows[-1] else f"Rain until around {when(end)}"
+        else:
+            head = f"Rain likely {first[0]['t']:%H:%M}–{end:%H:%M}"
+            if first[0]["t"].date() != rows[0]["t"].date():
+                head += f" {first[0]['t']:%a}"
+        detail = f"peaks at {peak['rain']}% around {when(peak['t'])}"
+        if len(runs) > 1:
+            detail += f" · more from {when(runs[1][0]['t'])}"
+        return head, detail
+
     peak = max(rows, key=lambda r: r["rain"])
-    if likely:
-        start, end = likely[0]["t"], likely[-1]["t"] + timedelta(hours=1)
-        return (f"Rain likely {start:%H:%M}–{end:%H:%M}",
-                f"peaks at {peak['rain']}% around {peak['t']:%H:%M}")
     if peak["rain"] >= 25:
-        return (f"Chance of showers around {peak['t']:%H:%M}", f"up to {peak['rain']}%")
-    return ("Dry for the next 24 hours", None)
+        return f"Chance of showers around {when(peak['t'])}", f"up to {peak['rain']}%"
+    return "Dry for the next 24 hours", None
 
 
 # ---------------------------------------------------------------- render
@@ -360,9 +384,10 @@ def draw_chart(d, rows, left, right, band_top, band_h, plot_bot, hour_every=3):
         if r["t"].hour == 0:
             d.line([s(left + step * i), s(plot_top), s(left + step * i), s(plot_bot)],
                    fill=MID, width=s(1))
-            d.text((s(left + step * i + 4), s(plot_top + 2)), f"{r['t']:%a}",
-                   font=font("medium", 14), fill=MID, anchor="la")
-        if i % hour_every == 0:
+            d.text((s(xc(i)), s(plot_bot + 8)), f"{r['t']:%a}", font=font("bold", 15),
+                   fill=INK, anchor="ma")
+            continue
+        if i % hour_every == 0 and all(rows[j]["t"].hour != 0 for j in range(max(0, i - 1), min(n, i + 2))):
             d.text((s(xc(i)), s(plot_bot + 8)), f"{r['t']:%H}", font=font("medium", 15),
                    fill=INK, anchor="ma")
 
