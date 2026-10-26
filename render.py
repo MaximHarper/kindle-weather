@@ -488,17 +488,20 @@ def render(data, place, out, orientation="landscape", preview=None):
     """
     orientation:
       portrait   - Kindle upright, buttons at the bottom
-      landscape  - Kindle turned 90° anticlockwise, buttons on the right
+      landscape  - Kindle on its side, buttons on the right
+      landscape-flipped - Kindle on its side, buttons on the left
     The Kindle's framebuffer is always 600x800 portrait, so landscape output is
-    rotated 90° clockwise before saving; `preview` saves the upright view.
+    rotated before saving; `preview` saves the upright view.
     """
-    layout = layout_landscape if orientation == "landscape" else layout_portrait
+    layout = layout_portrait if orientation == "portrait" else layout_landscape
     img, size = layout(data, place)
     img = img.resize(size, Image.LANCZOS)
     img = img.point(lambda v: int(round(v / 17)) * 17)   # Kindle's 16 grey levels
     if preview:
         img.save(preview, optimize=True)
     if orientation == "landscape":
+        img = img.transpose(Image.Transpose.ROTATE_90)    # 90° anticlockwise
+    elif orientation == "landscape-flipped":
         img = img.transpose(Image.Transpose.ROTATE_270)   # 90° clockwise
     img.save(out, optimize=True)
     return out
@@ -512,8 +515,8 @@ def main():
     ap.add_argument("--tz", default=DEFAULT["tz"])
     ap.add_argument("--out", default="dashboard.png")
     ap.add_argument("--sample", action="store_true", help="use built-in sample data")
-    ap.add_argument("--orientation", choices=["landscape", "portrait"], default="landscape",
-                    help="landscape = Kindle turned 90° anticlockwise, buttons on the right")
+    ap.add_argument("--orientation", choices=["landscape", "landscape-flipped", "portrait"], default="landscape",
+                    help="landscape = buttons on the right; landscape-flipped = buttons on the left")
     ap.add_argument("--preview", help="also save an upright (unrotated) copy here")
     a = ap.parse_args()
     data = sample() if a.sample else fetch(a.lat, a.lon, a.tz)
